@@ -18,7 +18,7 @@ router.post('/signup', async(req, res) =>{
 
         await user.save()
 
-        return res.status(200).send({status: 'ok', msg: 'User created successfully'})
+        return res.status(200).send({status: 'ok', msg: 'User created successfully'}, user)
         
     } catch (error) {
         if(error.name == "JsonWebTokenError")
