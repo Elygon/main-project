@@ -10,6 +10,9 @@ router.post('/signup', async(req, res) =>{
         return res.status(400).send({status: 'error', msg: 'All fields must be filled'})
 
     try {
+        const check = await User.findOne({email: email})
+        if(check)
+            return res.status(200).send({status: 'ok', msg: 'An account with this email already exists'})
 
         const user = new User()
         user.fullname = fullname
