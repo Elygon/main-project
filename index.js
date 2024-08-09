@@ -24,7 +24,7 @@ app.use(express.json())
 app.use(express.urlencoded({extended: true}))
 
 //routes
-app.use('/user_auth', require('./routes/auth'))
+app.use('/auth', require('./routes/auth'))
 
 
 const port = process.env.PORT
