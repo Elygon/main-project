@@ -25,7 +25,10 @@ app.use(express.urlencoded({extended: true}))
 
 //routes
 app.use('/auth', require('./routes/auth'))
-
+app.use('/vauth', require('./routes/vauth'))
+app.use('/useraccount', require('./routes/useraccount'))
+app.use('/vaccount', require('./routes/vaccount'))
+app.use('/order', require('./routes/order'))
 
 const port = process.env.PORT
 app.listen(port , ()=>{

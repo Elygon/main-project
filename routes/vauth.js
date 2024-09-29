@@ -2,33 +2,37 @@ const express = require('express')
 const router = express.Router()
 const bcrypt = require('bcrypt')
 const jwt = require('jsonwebtoken')
-const User = require('../models/user')
+
+const Vendor = require('../models/vendor')
+
 
 //endpoint to SignUp
 router.post('/signup', async(req, res) =>{
-    const {fullname, email, phone_no, password} = req.body
-    if(!fullname || !email || !phone_no || !password)
+    const {fullname, email, phone_no, password, companyName, ownerName, address} = req.body
+    if(!fullname || !email || !phone_no || !password || !companyName || !ownerName || !address)
         return res.status(400).send({status: 'error', msg: 'All fields must be filled'})
 
     try {
-        const check = await User.findOne({email: email})
+        const check = await Vendor.findOne({email: email})
         if(check)
             return res.status(200).send({status: 'ok', msg: 'An account with this email already exists'})
 
-
         const hashedpassword = await bcrypt.hash(password, 10)
+        
+        const vendor = new Vendor()
+        vendor.fullname = fullname
+        vendor.companyName = companyName
+        vendor.ownerName = ownerName
+        vendor.email = email
+        vendor.phone_no = phone_no
+        vendor.password = hashedpassword
+        vendor.address = address
+        vendor.gender = ""
+        vendor.age = 
 
+        await vendor.save()
 
-        const user = new User()
-        user.fullname = fullname
-        user.email = email
-        user.phone_no = phone_no
-        user.password = hashedpassword
-        user.gender = ""
-
-        await user.save()
-
-        return res.status(200).send({status: 'ok', msg: 'User created successfully', user})
+        return res.status(200).send({status: 'ok', msg: 'Vendor created successfully', vendor})
         
     } catch (error) {
         if(error.name == "JsonWebTokenError")
@@ -45,27 +49,27 @@ router.post('/login', async(req, res) => {
         return res.status(400).send({status: 'error', msg: 'All fields must be filled'})
 
     try {
-        // get user from database
-        let user = await User.findOne({email}).lean()
-        if(!user)
-            return res.status(400).send({status: 'error', msg:'No user with the email found'})
+        // get vendor from database
+        let vendor = await Vendor.findOne({email}).lean()
+        if(!vendor)
+            return res.status(200).send({status: 'ok', msg:'No vendor with this email found'})
 
         //compare password
-        const correct_password = await bcrypt.compare(password, user.password)
+        const correct_password = await bcrypt.compare(password, vendor.password)
         if(!correct_password)
-            return res.status(400).send({status: 'error', msg:'Password is incorrect'})
+            return res.status(200).send({status: 'ok', msg:'Incorrect Password'})
 
         // create token
         const token = jwt.sign({
-            _id: user._id,
-            email: user.email
-        }, process.env.JWT_SECRET, {expiresIn: '1h'})
+            _id: vendor._id,
+            email: vendor.email
+        }, process.env.JWT_SECRET)
 
-        //update user document to online
-        user = await User.findOneAndUpdate({email}, {is_online: true}, {new: true}).lean()
+        //update vendor document to online
+        vendor = await Vendor.findOneAndUpdate({email}, {is_online: true}, {new: true}).lean()
 
         //send response
-        res.status(200).send({status: 'ok', msg: 'Login Successful', user, token})
+        res.status(200).send({status: 'ok', msg: 'Login Successful', vendor, token})
         
     } catch (error) {
         console.log(error)
@@ -81,9 +85,11 @@ router.post('/logout', async(req, res) => {
 
     try {
         //verify token
-        const user = jwt.verify(token, process.env.JWT_SECRET)
+        const mVendor = jwt.verify(token, process.env.JWT_SECRET)
+        
+        const vendor_id = mVendor._id
 
-        await User.updateOne({_id: user._id}, {is_online: false})
+        await Vendor.updateOne({_id: vendor_id}, {is_online: false})
         return res.status(200).send({status: 'ok', msg: 'Logout Successful'})
     } catch (error) {
         console.log(error)
@@ -102,14 +108,14 @@ router.post('/delete_account', async(req, res) => {
 
     try {
         //verify token
-        const user = jwt.verify(token, process.env.JWT_SECRET)
+        const vendor = jwt.verify(token, process.env.JWT_SECRET)
 
-        //Find the user and delete the account
-        const Duser = await User.findByIdAndDelete(user._id)
+        //Find the vendor and delete the account
+        const Duser = await Vendor.findByIdAndDelete(vendor._id)
 
-            //Check if the user exists and was deleted
+            //Check if the vendor exists and was deleted
         if(!Duser)
-            return res.status(400).send({status: 'error', msg: 'No user Found'})
+            return res.status(400).send({status: 'error', msg: 'No vendor Found'})
 
         return res.status(200).send({status: 'ok', msg: 'Account Successfully deleted'})
 
