@@ -5,121 +5,155 @@ const jwt = require('jsonwebtoken')
 const SavedItems = require('../models/savedItems')
 
 
-//endpoint to SignUp
-router.post('/signup', async(req, res) =>{
-    const {fullname, email, password} = req.body
-    if(!fullname || !email || !password)
-        return res.status(400).send({status: 'error', msg: 'All fields must be filled'})
+// verify JWT token
+const verifyToken = (req, res) => {
+    //Bearer token extraction
+    const token = req.header('Authorization')?.split('')[1]
+
+    //Log the token
+    console.log('Token received:', token)
+
+    //Log the JWT secret
+    console.log('JWT Secret:', process.env.JWT_SECRET)
+
+    if(!token) {
+        return res.status(400).send({status: 'error', msg: 'Token is required'})
+        return null
+    }
 
     try {
-        const check = await Vendor.findOne({email: email})
-        if(check)
-            return res.status(200).send({status: 'ok', msg: 'An account with this email already exists'})
-
-        const hashedpassword = await bcrypt.hash(password, 10)
-        
-        const vendor = new Vendor()
-        vendor.fullname = fullname
-        vendor.email = email
-        vendor.password = hashedpassword
-
-        await vendor.save()
-
-        return res.status(200).send({status: 'ok', msg: 'Vendor created successfully', vendor})
-        
+        return jwt.verify(token, process.env.JWT_SECRET)
     } catch (error) {
-        if(error.name == "JsonWebTokenError")
+        //Log the exact error
+        console.error('JWT Error:', error)
+
+        if (error.name === 'JsonWebTokenError') {
             return res.status(400).send({status: 'error', msg: 'Invalid token'})
+        } else if (error.name === 'TokenExpiredError') {
+            return res.status(400).send({status: 'error', msg: 'Token expired'})
+        } else {
+            return res.status(500).send({status: 'error', msg:'Failed to update order', error: error.message})
+        }
+        return null
+    }
+}
+
+ 
+//endpoint for all saved items for the authenticated user
+router.post('/all_savedItems', async(req, res) => {
+    const user = verifyToken(req, res)
+
+    //If token is invalid, stop further processing
+    if(!user?._id) return
+
+    try {
+        const savedItems = await SavedItems.find({user_id: user.id})
+
+        return res.status(200).json({status: 'ok', savedItems})
+    } catch (error) {
+        return res.status(500).json({status: 'error', msg: 'Failed to fetch saved items', error: error.message})
+    }
+})
+
+//endpoint for new saved item
+router.post('/new_savedItem', async(req, res) =>{
+    const user = verifyToken(req, res)
+
+    //If token is invalid, stop further processing
+    if(!user?._id) return
+
+    const {item_id, name, price, category} = req.body
     
-        return res.status(500).send({status: 'error', msg:'An error occured'})
-    }
-})
-
-//endpoint to Login
-router.post('/login', async(req, res) => {
-    const {email, password} = req.body
-    if (!email || !password)
-        return res.status(400).send({status: 'error', msg: 'All fields must be filled'})
-
     try {
-        // get vendor from database
-        let vendor = await Vendor.findOne({email}).lean()
-        if(!vendor)
-            return res.status(200).send({status: 'ok', msg:'No vendor with the email found'})
+        //Create a new saved item with the user's ID
+        const newSavedItem = new SavedItem()
 
-        //compare password
-        const correct_password = await bcrypt.compare(password, vendor.password)
-        if(!correct_password)
-            return res.status(200).send({status: 'ok', msg:'Incorrect Password'})
+        //Attach the user ID from the token
+        newSavedItem.user_id = user._Id
+        newSavedItem.item_id = item_id
+        newSavedItem.name = name
+        newSavedItem.price = price
+        newSavedItem.category = category
+        newSavedItem.saved_date = new Date()
+        newOrder.status = 'pending'
 
-        // create token
-        const token = jwt.sign({
-            _id: vendor._id,
-            email: vendor.email
-        }, process.env.JWT_SECRET)
+        await newSavedItem.save()
 
-        //update vendor document to online
-        vendor = await Vendor.findOneAndUpdate({email}, {is_online: true}, {new: true}).lean()
-
-        //send response
-        res.status(200).send({status: 'ok', msg: 'Login Successful', vendor, token})
+        return res.status(200).send({status: 'ok', msg: 'Item saved successfully', newSavedItem})
         
     } catch (error) {
-        console.log(error)
-        return res.status(500).send({status: 'error', msg:'An error occured'})  
+        return res.status(500).send({status: 'error', msg:'Failed to save item', error: error.message})
     }
 })
 
-//endpoint to Logout
-router.post('/logout', async(req, res) => {
-    const {token} = req.body
-    if(!token)
-        return res.status(400).send({status: 'error', msg: 'Token is required'})
+//endpoint to update existing saved item
+router.post('/update_savedItem', async(req, res) =>{
+    const user = verifyToken(req, res)
+
+    //If token is invalid, stop further processing
+    if(!user?._id) return
+
+    const {savedItem_id, name, price, category} = req.body
+    
+    if(!savedItem_id) {
+        return res.status(400).send({status: 'error', msg: 'Saved item ID is required'})
+    }
+    
+    if(!name && !category) {
+        return res.status(400).send({status: 'error', msg: 'At least one field must be updated'})
+    }
 
     try {
-        //verify token
-        const Vendor = jwt.verify(token, process.env.JWT_SECRET)
+        //Fetch the existing order to compare fields
+        const eSavedItem = await SavedItem.findById(savedItem_id)
+        if(!eSavedItem) {
+            return res.status(400).send({status: 'error', msg: 'Saved item is not found'})
+        }
+        
+        //Update the order
+        const updatedSavedItem = await SavedItem.findByIdAndUpdate(savedItem_id, {
+            name: name || eSavedItem.name,
+            category: category || eSavedItem.category
+        }, {new: true})
 
-        await Vendor.updateOne({_id: vendor._id}, {is_online: false})
-        return res.status(200).send({status: 'ok', msg: 'Logout Successful'})
+        //Return success response
+        return res.status(200).send({status: 'ok', msg: 'Saved item updated successfully', updatedSavedItem})
+        
+    } catch (error) {
+        return res.status(500).send({status: 'error', msg:'Failed to update saved item', error: error.message})
+    }
+})
+
+//endpoint to delete 
+router.post('/delete_savedItem', async(req, res) => {
+    const user = verifyToken(req, res)
+
+    //If token is invalid, stop further processing
+    if(!user?._id) return
+
+    const {savedItem_id} = req.body
+    if(!savedItem_id)
+        return res.status(400).send({status: 'error', msg: 'Saved item ID is required'})
+
+    try {
+        //Find and delete the order by its ID
+        const deletedSavedItem = await SavedItem.findByIdAndDelete(savedItem_id)
+
+        //Check if the order exists
+        if(!deletedSavedItem)
+            return res.status(400).send({status: 'error', msg: 'Saved item not Found'})
+
+        return res.status(200).send({status: 'ok', msg: 'Saved item Successfully deleted'})
+
     } catch (error) {
         console.log(error)
+
         if(error == "JsonWebTokenError")
             return res.status(400).send({status: 'error', msg: 'Invalid token'})
 
-        return res.status(500).send({status: 'error', msg:'An error occured'})    
-    }
-})
-
-//endpoint to delete account
-router.post('/delete_account', async(req, res) => {
-    const {token} = req.body
-    if(!token)
-        return res.status(400).send({status: 'error', msg: 'Token is required'})
-
-    try {
-        //verify token
-        const vendor = jwt.verify(token, process.env.JWT_SECRET)
-
-        //Find the vendor and delete the account
-        const Duser = await Vendor.findByIdAndDelete(vendor._id)
-
-            //Check if the vendor exists and was deleted
-        if(!Duser)
-            return res.status(400).send({status: 'error', msg: 'No vendor Found'})
-
-        return res.status(200).send({status: 'ok', msg: 'Account Successfully deleted'})
-
-    } catch (error) {
-        console.log(error)
-
-        if(error == "JsonWebTokenError")
-            return res.status(400).send({status: 'error', msg: 'Invalid token'})
-
-        return res.status(500).send({status: 'error', msg:'An error occured'})    
+        return res.status(500).send({status: 'error', msg:'Failed to delete saved item', error: error.message})    
     }
 
 })
-
 
 module.exports = router
