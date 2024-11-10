@@ -6,24 +6,29 @@ const Order = require('../models/order')
 
 //Middleware to verify JWT token
 const verifyToken = (req, res) => {
-    //Bearer token extraction
-    const token = req.header('Authorization')?.split('')[1]
+    //Log the full Authorization header for debugging
+    console.log("Full Authorization header:", req.header('Authorization'))
+
+
+    //Extract the token by replacing 'Bearer' prefix if it exists
+    const token = req.header('Authorization')?.replace('Bearer ', '')
+    console.log("Token extracted:", token)
 
     if(!token) {
-        return res.status(400).json({status: 'error', msg: 'Token is required'})
-        return null
+        return res.status(400).send({status: 'error', msg: 'Access denied. No token provided.'})
     }
 
     try {
-        const user = jwt.verify(token, process.env.JWT_SECRET || 'yourSuperSecretKey')
-        return user
+        //Verify the token
+        return jwt.verify(token, process.env.JWT_SECRET || 'your_super_secret_key')
     } catch (error) {
+        //Log the exact error
         if (error.name === 'JsonWebTokenError') {
-            return res.status(400).send({status: 'error', msg: 'Invalid token'})
+            res.status(400).send({status: 'error', msg: 'Invalid token'})
         } else if (error.name === 'TokenExpiredError') {
-            return res.status(400).send({status: 'error', msg: 'Token expired'})
+            res.status(400).send({status: 'error', msg: 'Token expired'})
         } else {
-            return res.status(500).send({status: 'error', msg:'Token verification failed'})
+            res.status(500).send({status: 'error', msg:'Token verification failed'})
         }
         return null
     }
@@ -38,11 +43,11 @@ router.post('/all_orders', async(req, res) => {
     if(!user?._id) return
 
     try {
-        const orders = await Order.find({user_id: user.id})
+        const orders = await Order.find({user_id: user._id})
 
-        return res.status(200).json({status: 'ok', orders})
+        return res.status(200).send({status: 'ok', orders})
     } catch (error) {
-        return res.status(500).json({status: 'error', msg: 'Failed to fetch orders', error: error.message})
+        return res.status(500).send({status: 'error', msg: 'Failed to fetch orders', error: error.message})
     }
 })
 
@@ -53,16 +58,19 @@ router.post('/specific_order', async(req, res) => {
     //If token is invalid, stop further processing
     if(!user?._id) return
 
-    const {id} = req.body
+    const {order_id} = req.body
+    if (!order_id) {
+        return res.status(400).send({status: 'error', msg: 'Order ID is required'})
+    }
     try {
-        const order = await Order.findById(id)
+        const order = await Order.findById(order_id)
 
         if (!order) {
-            return res.status(400).json({status: 'error', msg: 'Order not found'})
+            return res.status(400).send({status: 'error', msg: 'Order not found'})
         }
-        return res.status(200).json({status: 'ok', order})
+        return res.status(200).send({status: 'ok', order})
     } catch (error) {
-        res.status(500).json({status: 'error', msg: 'Failed to fetch order', error: error.message})
+        return res.status(500).send({status: 'error', msg: 'Failed to fetch order', error: error.message})
     }
 })
 
@@ -141,10 +149,6 @@ router.post('/update_order', async(req, res) =>{
         return res.status(200).send({status: 'ok', msg: 'Order updated successfully', updatedOrder})
         
     } catch (error) {
-        console.error('Update order error:', error)
-        if(error.name === "JsonWebTokenError")
-            return res.status(400).send({status: 'error', msg: 'Invalid token'})
-    
         return res.status(500).send({status: 'error', msg:'Failed to update order', error: error.message})
     }
 })
@@ -171,14 +175,8 @@ router.post('/delete_order', async(req, res) => {
         return res.status(200).send({status: 'ok', msg: 'Order Successfully deleted'})
 
     } catch (error) {
-        console.log(error)
-
-        if(error == "JsonWebTokenError")
-            return res.status(400).send({status: 'error', msg: 'Invalid token'})
-
         return res.status(500).send({status: 'error', msg:'Failed to delete order', error: error.message})    
     }
-
 })
 
 module.exports = router

@@ -29,6 +29,7 @@ app.use('/vauth', require('./routes/vauth'))
 app.use('/useraccount', require('./routes/useraccount'))
 app.use('/vaccount', require('./routes/vaccount'))
 app.use('/order', require('./routes/order'))
+app.use('/savedItems', require('./routes/savedItems'))
 
 const port = process.env.PORT
 app.listen(port , ()=>{

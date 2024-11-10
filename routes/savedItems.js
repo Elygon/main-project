@@ -5,34 +5,31 @@ const jwt = require('jsonwebtoken')
 const SavedItems = require('../models/savedItems')
 
 
-// verify JWT token
+//Middleware to verify JWT token
 const verifyToken = (req, res) => {
-    //Bearer token extraction
-    const token = req.header('Authorization')?.split('')[1]
+    //Log the full Authorization header for debugging
+    console.log("Full Authorization header:", req.header('Authorization'))
 
-    //Log the token
-    console.log('Token received:', token)
 
-    //Log the JWT secret
-    console.log('JWT Secret:', process.env.JWT_SECRET)
+    //Extract the token by replacing 'Bearer' prefix if it exists
+    const token = req.header('Authorization')?.replace('Bearer ', '')
+    console.log("Token extracted:", token)
 
     if(!token) {
-        return res.status(400).send({status: 'error', msg: 'Token is required'})
-        return null
+        return res.status(400).send({status: 'error', msg: 'Access denied. No token provided.'})
     }
 
     try {
-        return jwt.verify(token, process.env.JWT_SECRET)
+        //Verify the token
+        return jwt.verify(token, process.env.JWT_SECRET || 'your_super_secret_key')
     } catch (error) {
         //Log the exact error
-        console.error('JWT Error:', error)
-
         if (error.name === 'JsonWebTokenError') {
-            return res.status(400).send({status: 'error', msg: 'Invalid token'})
+            res.status(400).send({status: 'error', msg: 'Invalid token'})
         } else if (error.name === 'TokenExpiredError') {
-            return res.status(400).send({status: 'error', msg: 'Token expired'})
+            res.status(400).send({status: 'error', msg: 'Token expired'})
         } else {
-            return res.status(500).send({status: 'error', msg:'Failed to update order', error: error.message})
+            res.status(500).send({status: 'error', msg:'Token verification failed'})
         }
         return null
     }
